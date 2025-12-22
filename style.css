@@ -1,19 +1,78 @@
-        /* Styles from previous version remain largely the same */
+        /* CSS Custom Properties for theming */
+:root {
+    --bg-primary: #f8fafc;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #f9fafb;
+    --bg-hover: #f3f4f6;
+    --text-primary: #1f2937;
+    --text-secondary: #4b5563;
+    --text-muted: #6b7280;
+    --text-light: #9ca3af;
+    --border-color: #e5e7eb;
+    --border-light: #f3f4f6;
+    --accent-primary: #3b82f6;
+    --accent-hover: #2563eb;
+    --accent-light: #60a5fa;
+    --highlight-bg: #fef9c3;
+    --success: #10b981;
+    --error: #dc2626;
+    --warning: #ca8a04;
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    --focus-ring: 0 0 0 3px rgba(59, 130, 246, 0.5);
+}
+
+/* Dark mode theme */
+body.dark-mode {
+    --bg-primary: #0f172a;
+    --bg-secondary: #1e293b;
+    --bg-tertiary: #334155;
+    --bg-hover: #475569;
+    --text-primary: #f1f5f9;
+    --text-secondary: #cbd5e1;
+    --text-muted: #94a3b8;
+    --text-light: #64748b;
+    --border-color: #334155;
+    --border-light: #475569;
+    --accent-primary: #60a5fa;
+    --accent-hover: #93c5fd;
+    --accent-light: #3b82f6;
+    --highlight-bg: #854d0e;
+    --success: #34d399;
+    --error: #f87171;
+    --warning: #fbbf24;
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.4);
+    --focus-ring: 0 0 0 3px rgba(96, 165, 250, 0.5);
+}
+
 body {
     font-family: "Inter", sans-serif;
-    background-color: #f8fafc;
-    /* slate-50 */
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
     line-height: 1.6;
+    transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-body.dark-mode {
-    filter: invert(1) hue-rotate(180deg);
+/* Global focus styles for accessibility */
+*:focus {
+    outline: none;
 }
 
-body.dark-mode img,
-body.dark-mode video,
-body.dark-mode svg {
-    filter: invert(1) hue-rotate(180deg);
+*:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
 }
 
         .container {
@@ -23,8 +82,7 @@ body.dark-mode svg {
         }
 
         .highlight {
-            background-color: #fef9c3;
-            /* yellow-100 */
+            background-color: var(--highlight-bg);
             padding: 0.125rem 0.25rem;
             border-radius: 0.25rem;
             font-weight: 500;
@@ -38,12 +96,12 @@ body.dark-mode svg {
                 padding 0.5s ease-out, margin 0.5s ease-out;
             max-height: 1000px;
             opacity: 1;
-            border: 1px solid #e5e7eb;
+            border: 1px solid var(--border-color);
             border-radius: 0.5rem;
             margin-top: 1rem;
-            background-color: white;
+            background-color: var(--bg-secondary);
             padding: 1.5rem;
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            box-shadow: var(--shadow-sm);
         }
 
         .advanced-search-collapsible.collapsed {
@@ -64,7 +122,7 @@ body.dark-mode svg {
         }
 
         #toggleAdvancedSearchLink button {
-            color: #3b82f6;
+            color: var(--accent-primary);
             background: none;
             border: none;
             padding: 0.25rem 0.5rem;
@@ -74,7 +132,7 @@ body.dark-mode svg {
         }
 
         #toggleAdvancedSearchLink button:hover {
-            color: #2563eb;
+            color: var(--accent-hover);
         }
 
         /* Column layout styles */
@@ -88,10 +146,10 @@ body.dark-mode svg {
         .volume-column {
             flex: 0 0 auto;
             width: 320px;
-            background-color: #ffffff;
-            border: 1px solid #e5e7eb;
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
             border-radius: 0.5rem;
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            box-shadow: var(--shadow-sm);
             min-height: 100px;
             max-height: 80vh;
             overflow-y: auto;
@@ -102,22 +160,22 @@ body.dark-mode svg {
         .volume-column-header-area {
             position: sticky;
             top: 0;
-            background-color: #ffffff;
+            background-color: var(--bg-secondary);
             z-index: 10;
             padding: 1rem 1rem 0 1rem;
-            border-bottom: 1px solid #e5e7eb;
+            border-bottom: 1px solid var(--border-color);
         }
 
         .volume-column-header {
             font-size: 1.125rem;
             font-weight: 600;
-            color: #1f2937;
+            color: var(--text-primary);
             margin-bottom: 0.25rem;
         }
 
         .volume-column-subheader {
             font-size: 0.875rem;
-            color: #6b7280;
+            color: var(--text-muted);
             padding-bottom: 0.75rem;
         }
 
@@ -126,10 +184,10 @@ body.dark-mode svg {
         }
 
         .volume-column .result-card {
-            background-color: #f9fafb;
+            background-color: var(--bg-tertiary);
             margin-bottom: 0.75rem;
             box-shadow: none;
-            border: 1px solid #f3f4f6;
+            border: 1px solid var(--border-light);
             position: relative;
             z-index: 1;
         }
@@ -149,56 +207,49 @@ body.dark-mode svg {
         }
 
         .result-card {
-            background-color: white;
-            /* Set consistent, minimal padding on all sides */
+            background-color: var(--bg-secondary);
             padding-top: 0.05rem;
             padding-right: 0.05rem;
             padding-bottom: 0.05rem;
-            /* Significantly reduced from 2.5rem */
             padding-left: 0.05rem;
 
             border-radius: 0.75rem;
-            /* Affects corner rounding, not content space directly */
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-            /* Visual effect */
-            border: 1px solid #e2e8f0;
-            /* The border itself is 1px */
+            box-shadow: var(--shadow-md);
+            border: 1px solid var(--border-color);
 
-            /* Layout for direct children of .result-card */
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            /* This will space out items if there are multiple direct children */
             position: relative;
-            transition: transform 0.2s, box-shadow 0.2s;
+            transition: transform 0.2s, box-shadow 0.2s, background-color 0.3s;
         }
 
         .result-card:hover {
             transform: translateY(-2px);
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            box-shadow: var(--shadow-lg);
         }
 
         /* Clickable scripture heading in result card (for main results) */
         .result-card .scripture-title-heading.clickable-heading {
             cursor: pointer;
             transition: color 0.2s;
+            color: var(--text-primary);
         }
 
         .result-card .scripture-title-heading.clickable-heading:hover {
-            color: #2563eb;
-            /* blue-600 */
+            color: var(--accent-primary);
             text-decoration: underline;
         }
 
 
         /* Copy button */
         .copy-button:hover {
-            background-color: #d1d5db;
-            color: #1f2937;
+            background-color: var(--bg-hover);
+            color: var(--text-primary);
         }
 
         .copy-button.copied {
-            background-color: #10b981;
+            background-color: var(--success);
             color: white;
         }
 
@@ -311,18 +362,17 @@ body.dark-mode svg {
         }
 
         .modal-box {
-            background-color: white;
+            background-color: var(--bg-secondary);
             padding: 2rem;
             border-radius: 0.5rem;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            box-shadow: var(--shadow-lg);
             max-width: 90%;
             width: 600px;
             max-height: 80vh;
-            /* Modal itself is scrollable */
             overflow-y: auto;
             position: relative;
             transform: scale(0.95);
-            transition: transform 0.3s ease;
+            transition: transform 0.3s ease, background-color 0.3s;
         }
 
         .modal-overlay.active .modal-box {
@@ -338,17 +388,18 @@ body.dark-mode svg {
             font-size: 1.5rem;
             line-height: 1;
             cursor: pointer;
-            color: #6b7280;
+            color: var(--text-muted);
         }
 
         .modal-close-button:hover {
-            color: #1f2937;
+            color: var(--text-primary);
         }
 
         .modal-content h3 {
             font-size: 1.25rem;
             font-weight: 600;
             margin-bottom: 1rem;
+            color: var(--text-primary);
         }
 
         .modal-content h4 {
@@ -356,8 +407,8 @@ body.dark-mode svg {
             font-weight: 600;
             margin-top: 1.5rem;
             margin-bottom: 0.5rem;
-            color: #4338ca;
-            border-top: 1px solid #eee;
+            color: var(--accent-primary);
+            border-top: 1px solid var(--border-color);
             padding-top: 1rem;
         }
 
@@ -365,7 +416,7 @@ body.dark-mode svg {
         .modal-content ul,
         .modal-content dl {
             margin-bottom: 1rem;
-            color: #374151;
+            color: var(--text-secondary);
         }
 
         .modal-content li {
@@ -375,7 +426,7 @@ body.dark-mode svg {
         }
 
         .modal-content code {
-            background-color: #f3f4f6;
+            background-color: var(--bg-tertiary);
             padding: 0.1rem 0.4rem;
             border-radius: 0.25rem;
             font-family: monospace;
@@ -384,7 +435,7 @@ body.dark-mode svg {
 
         .modal-content dt {
             font-weight: 600;
-            color: #1f2937;
+            color: var(--text-primary);
             margin-top: 0.5rem;
         }
 
@@ -402,10 +453,10 @@ body.dark-mode svg {
             font-size: 0.875rem;
             max-height: 300px;
             overflow-y: auto;
-            border: 1px solid #e5e7eb;
+            border: 1px solid var(--border-color);
             padding: 0.5rem;
             border-radius: 0.375rem;
-            background-color: #f9fafb;
+            background-color: var(--bg-tertiary);
         }
 
         .stop-words-list::-webkit-scrollbar {
@@ -428,7 +479,7 @@ body.dark-mode svg {
 
         .stop-words-list li {
             margin-bottom: 0.25rem;
-            color: #4b5563;
+            color: var(--text-secondary);
             -webkit-column-break-inside: avoid;
             page-break-inside: avoid;
             break-inside: avoid;
@@ -452,19 +503,20 @@ body.dark-mode svg {
 
         /* Styles for the highlighted current verse in the context drawer */
         #contextDrawerContent .result-card.current-context-verse {
-            background-color: #e0e7ff;
-            /* indigo-100 */
-            border-color: #a5b4fc;
-            /* indigo-300 */
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06), 0 0 0 2px #c7d2fe;
-            /* Original shadow + indigo-200 focus ring like */
+            background-color: var(--accent-light);
+            border-color: var(--accent-primary);
+            box-shadow: var(--shadow-sm), var(--focus-ring);
+        }
+
+        body.dark-mode #contextDrawerContent .result-card.current-context-verse {
+            background-color: #1e3a5f;
         }
 
 
         /* Search status style */
         #searchStatus {
             font-size: 0.875rem;
-            color: #6b7280;
+            color: var(--text-muted);
             margin-top: 0.25rem;
         }
 
@@ -475,9 +527,9 @@ body.dark-mode svg {
         /* Style for fallback data message */
         #fallbackMessage {
             font-size: 0.875rem;
-            color: #ca8a04;
-            background-color: #fef9c3;
-            border: 1px solid #fde68a;
+            color: var(--warning);
+            background-color: var(--highlight-bg);
+            border: 1px solid var(--warning);
             padding: 0.5rem 1rem;
             border-radius: 0.375rem;
             margin-bottom: 1rem;
@@ -494,7 +546,7 @@ body.dark-mode svg {
 
         /* Main Tab styles (Scriptures/Statistics) */
         .tab-container {
-            border-bottom: 1px solid #e5e7eb;
+            border-bottom: 1px solid var(--border-color);
             margin-bottom: 1.5rem;
         }
 
@@ -502,7 +554,7 @@ body.dark-mode svg {
             padding: 0.75rem 1.5rem;
             font-size: 0.875rem;
             font-weight: 500;
-            color: #6b7280;
+            color: var(--text-muted);
             border: none;
             background: none;
             cursor: pointer;
@@ -512,16 +564,16 @@ body.dark-mode svg {
         }
 
         .tab-button:hover {
-            color: #1f2937;
+            color: var(--text-primary);
         }
 
         .tab-button.active {
-            color: #3b82f6;
-            border-bottom-color: #3b82f6;
+            color: var(--accent-primary);
+            border-bottom-color: var(--accent-primary);
         }
 
         .tab-button:disabled {
-            color: #d1d5db;
+            color: var(--text-light);
             cursor: not-allowed;
         }
 
@@ -535,7 +587,7 @@ body.dark-mode svg {
 
         /* N-gram Tab styles (within Statistics) */
         .ngram-tab-container {
-            border-bottom: 1px solid #e5e7eb;
+            border-bottom: 1px solid var(--border-color);
             margin-bottom: 1rem;
             margin-top: 1rem;
         }
@@ -544,7 +596,7 @@ body.dark-mode svg {
             padding: 0.5rem 1rem;
             font-size: 0.875rem;
             font-weight: 500;
-            color: #6b7280;
+            color: var(--text-muted);
             border: none;
             background: none;
             cursor: pointer;
@@ -554,12 +606,12 @@ body.dark-mode svg {
         }
 
         .ngram-tab-button:hover {
-            color: #1f2937;
+            color: var(--text-primary);
         }
 
         .ngram-tab-button.active {
-            color: #1f2937;
-            border-bottom-color: #1f2937;
+            color: var(--text-primary);
+            border-bottom-color: var(--text-primary);
         }
 
         .ngram-tab-content {
@@ -581,14 +633,15 @@ body.dark-mode svg {
 
         .stats-table th,
         .stats-table td {
-            border: 1px solid #e5e7eb;
+            border: 1px solid var(--border-color);
             padding: 0.5rem 0.75rem;
             text-align: left;
             vertical-align: top;
+            color: var(--text-primary);
         }
 
         .stats-table th {
-            background-color: #f9fafb;
+            background-color: var(--bg-tertiary);
             font-weight: 600;
             cursor: pointer;
             position: relative;
@@ -600,21 +653,21 @@ body.dark-mode svg {
             top: 50%;
             transform: translateY(-50%);
             font-size: 0.7em;
-            color: #9ca3af;
+            color: var(--text-light);
         }
 
         .stats-table th.sorted-asc .sort-arrow::after {
             content: " ▲";
-            color: #374151;
+            color: var(--text-primary);
         }
 
         .stats-table th.sorted-desc .sort-arrow::after {
             content: " ▼";
-            color: #374151;
+            color: var(--text-primary);
         }
 
         .stats-table tbody tr:nth-child(even) {
-            background-color: #f9fafb;
+            background-color: var(--bg-tertiary);
         }
 
         /* Volume Breakdown Chart Style */
@@ -634,26 +687,26 @@ body.dark-mode svg {
         #statsVolumeChartContainer .axis path,
         #statsVolumeChartContainer .axis line {
             fill: none;
-            stroke: #9ca3af;
+            stroke: var(--text-light);
             shape-rendering: crispEdges;
         }
 
         #statsVolumeChartContainer .axis text {
             font-size: 0.75rem;
-            fill: #4b5563;
+            fill: var(--text-secondary);
         }
 
         #statsVolumeChartContainer .bar {
-            fill: #60a5fa;
+            fill: var(--accent-light);
             transition: fill 0.2s ease-in-out;
         }
 
         #statsVolumeChartContainer .bar:hover {
-            fill: #3b82f6;
+            fill: var(--accent-primary);
         }
 
         #statsVolumeChartContainer .bar-label {
-            fill: #1f2937;
+            fill: var(--text-primary);
             font-size: 0.75rem;
             text-anchor: start;
             dominant-baseline: central;
@@ -736,10 +789,10 @@ body.dark-mode svg {
         .wordCloudContainer {
             width: 100%;
             min-height: 250px;
-            border: 1px solid #e5e7eb;
+            border: 1px solid var(--border-color);
             border-radius: 0.375rem;
             position: relative;
-            background-color: #f9fafb;
+            background-color: var(--bg-tertiary);
             margin-top: 1rem;
         }
 
@@ -755,7 +808,7 @@ body.dark-mode svg {
         }
 
         .word-cloud-word:hover {
-            fill: #3b82f6;
+            fill: var(--accent-primary) !important;
         }
 
         .info-icon {
@@ -765,7 +818,7 @@ body.dark-mode svg {
             line-height: 0.8em;
             text-align: center;
             border-radius: 50%;
-            background-color: #9ca3af;
+            background-color: var(--text-light);
             color: white;
             font-size: 0.7em;
             font-weight: bold;
@@ -788,18 +841,14 @@ body.dark-mode svg {
         #journalPreview {
             min-height: 300px;
             max-height: 60vh;
-            /* Or some other suitable max height */
             overflow-y: auto;
-            background-color: #f9fafb;
-            /* bg-gray-50 */
+            background-color: var(--bg-tertiary);
             padding: 1rem;
             border-radius: 0.375rem;
-            /* rounded-md */
-            border: 1px solid #e5e7eb;
-            /* border-gray-200 */
+            border: 1px solid var(--border-color);
         }
 
-        /* Basic Markdown styling for preview if Tailwind prose is not available/used */
+        /* Basic Markdown styling for preview */
         #journalPreview h1,
         #journalPreview h2,
         #journalPreview h3,
@@ -810,28 +859,25 @@ body.dark-mode svg {
             margin-bottom: 0.6em;
             font-weight: 600;
             line-height: 1.25;
-            color: #1f2937;
+            color: var(--text-primary);
         }
 
         #journalPreview h1 {
             font-size: 1.875rem;
         }
 
-        /* text-2xl */
         #journalPreview h2 {
             font-size: 1.5rem;
         }
 
-        /* text-xl */
         #journalPreview h3 {
             font-size: 1.25rem;
         }
 
-        /* text-lg */
         #journalPreview p {
             margin-bottom: 1em;
             line-height: 1.6;
-            color: #374151;
+            color: var(--text-secondary);
         }
 
         #journalPreview ul,
@@ -854,25 +900,25 @@ body.dark-mode svg {
         }
 
         #journalPreview blockquote {
-            border-left: 4px solid #d1d5db;
+            border-left: 4px solid var(--border-color);
             padding-left: 1em;
             margin-left: 0;
             margin-bottom: 1em;
             font-style: italic;
-            color: #4b5563;
+            color: var(--text-secondary);
         }
 
         #journalPreview code {
-            background-color: #e5e7eb;
+            background-color: var(--bg-hover);
             padding: 0.2em 0.4em;
             border-radius: 0.25rem;
             font-family: monospace;
             font-size: 0.9em;
-            color: #1f2937;
+            color: var(--text-primary);
         }
 
         #journalPreview pre {
-            background-color: #e5e7eb;
+            background-color: var(--bg-hover);
             padding: 1em;
             border-radius: 0.375rem;
             overflow-x: auto;
@@ -887,17 +933,17 @@ body.dark-mode svg {
 
         #journalPreview hr {
             border: 0;
-            border-top: 1px solid #e5e7eb;
+            border-top: 1px solid var(--border-color);
             margin: 2em 0;
         }
 
         #journalPreview a {
-            color: #3b82f6;
+            color: var(--accent-primary);
             text-decoration: underline;
         }
 
         #journalPreview a:hover {
-            color: #2563eb;
+            color: var(--accent-hover);
         }
 
         /* Temporary message shown when clicking the seek button */
