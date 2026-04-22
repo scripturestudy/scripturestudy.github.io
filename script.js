@@ -121,6 +121,13 @@
         const darkModeToggle = document.getElementById("darkModeToggle");
         const darkModeIcon = document.getElementById("darkModeIcon");
 
+        // Semantic Search Elements
+        const semanticSearchToggle = document.getElementById("semanticSearchToggle");
+        const semanticSliderWrap = document.getElementById("semanticSliderWrap");
+        const semanticWeightSlider = document.getElementById("semanticWeightSlider");
+        const semanticWeightLabel = document.getElementById("semanticWeightLabel");
+        const semanticStatus = document.getElementById("semanticStatus");
+
         // --- Modal Elements ---
         const noteModal = document.getElementById('noteModal');
         const modalScriptureTextEl = document.getElementById('modalScriptureText');
@@ -169,8 +176,12 @@
         async function showSeekScripture() {
             try {
                 if (seekScriptures.length === 0) {
-                    const resp = await fetch('assets/seek-scriptures.json');
-                    seekScriptures = await resp.json();
+                    if (Array.isArray(self.__SEEK_SCRIPTURES)) {
+                        seekScriptures = self.__SEEK_SCRIPTURES;
+                    } else {
+                        const resp = await fetch('assets/seek-scriptures.json');
+                        seekScriptures = await resp.json();
+                    }
                 }
                 if (!Array.isArray(seekScriptures) || seekScriptures.length === 0) return;
                 const random = seekScriptures[Math.floor(Math.random() * seekScriptures.length)];
@@ -223,13 +234,17 @@
             let usingFallback = false;
 
             try {
-                const response = await fetch("lds-scriptures.json");
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                data = await response.json();
-                if (!Array.isArray(data)) {
-                    throw new Error("Scripture data is not in the expected array format.");
+                if (Array.isArray(self.__LDS_SCRIPTURES)) {
+                    data = self.__LDS_SCRIPTURES;
+                } else {
+                    const response = await fetch("lds-scriptures.json");
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    data = await response.json();
+                    if (!Array.isArray(data)) {
+                        throw new Error("Scripture data is not in the expected array format.");
+                    }
                 }
             } catch (error) {
                 console.warn(`Error loading LDS scriptures from JSON: ${error.message}. Using fallback dummy data.`);
@@ -247,7 +262,8 @@
                 const foundVolumesSet = new Set();
                 booksMap.clear();
 
-                data.forEach((verse) => {
+                data.forEach((verse, idx) => {
+                    if (verse) verse.__idx = idx; // row index for semantic embeddings alignment
                     if (verse && typeof verse.volume_title === "string" && typeof verse.book_title === "string") {
                         const volumeTitle = normalizeVolumeName(verse.volume_title);
                         foundVolumesSet.add(volumeTitle);
@@ -435,6 +451,11 @@
             scriptureCache.currentResults = [];
             switchTab("scriptures");
 
+            if (!scriptureCache.lds) {
+                loadingIndicator.classList.remove("hidden");
+                await fetchScriptureData();
+            }
+
             let searchTerm = searchInput.value.trim(); const originalSearchTerm = searchTerm;
             const verseTitleFilterTerm = verseTitleFilterInput.value.trim();
             const selectedVolumes = getSelectedVolumes(); let useRegex = regexSearchCheckbox.checked; const isCaseSensitive = caseSensitiveCheckbox.checked;
@@ -471,14 +492,58 @@
                 if (!Array.isArray(data) || data.length === 0) {if (!scripturesContent.querySelector(".bg-red-100")) {resultsHeadingText.textContent = "Results"; scripturesTabCount.textContent = "0"; noResultsMessage.textContent = "No scripture data is available to search."; noResultsMessage.classList.remove("hidden");} loadingIndicator.classList.add("hidden"); return;}
 
                 let filteredData = data; const volumesSet = new Set(selectedVolumes); filteredData = filteredData.filter((verse) => verse && typeof verse.volume_title === "string" && volumesSet.has(verse.volume_title));
-                if (searchTerm || generatedRegexString) {if (useRegex && mainSearchRegex) {results = filteredData.filter((verse) => verse && typeof verse.scripture_text === "string" && mainSearchRegex.test(verse.scripture_text)); if (mainSearchRegex.global) mainSearchRegex.lastIndex = 0;} else if (!useRegex && searchTerm) {const finalSearchTerm = isCaseSensitive ? searchTerm : searchTerm.toLowerCase(); results = filteredData.filter((verse) => {const text = verse && typeof verse.scripture_text === "string" ? (isCaseSensitive ? verse.scripture_text : verse.scripture_text.toLowerCase()) : ""; return text.includes(finalSearchTerm);});} else {results = filteredData;} } else {results = filteredData;}
-                if (verseTitleRegex) {results = results.filter((verse) => verse && typeof verse.verse_title === "string" && verseTitleRegex.test(verse.verse_title)); if (verseTitleRegex.global) verseTitleRegex.lastIndex = 0;}
+
+                const semanticOn = semanticSearchToggle && semanticSearchToggle.checked && !!window.__semanticSearch;
+                if (semanticOn && originalSearchTerm) {
+                    let semScores;
+                    try {
+                        semScores = await window.__semanticSearch.scoreAll(originalSearchTerm);
+                    } catch (err) {
+                        console.error(err);
+                        searchInputError.textContent = `Semantic search failed: ${err.message}`;
+                        loadingIndicator.classList.add("hidden");
+                        return;
+                    }
+                    let pool = filteredData;
+                    if (verseTitleRegex) {
+                        pool = pool.filter((verse) => verse && typeof verse.verse_title === "string" && verseTitleRegex.test(verse.verse_title));
+                    }
+                    const alpha = parseInt(semanticWeightSlider.value, 10) / 100;
+                    const kwNeedle = !useRegex ? (isCaseSensitive ? searchTerm : searchTerm.toLowerCase()) : null;
+                    const kwMatch = (verse) => {
+                        const text = verse && typeof verse.scripture_text === "string" ? verse.scripture_text : "";
+                        if (!text) return 0;
+                        if (useRegex && mainSearchRegex) {
+                            mainSearchRegex.lastIndex = 0;
+                            const m = mainSearchRegex.test(text) ? 1 : 0;
+                            mainSearchRegex.lastIndex = 0;
+                            return m;
+                        }
+                        const hay = isCaseSensitive ? text : text.toLowerCase();
+                        return hay.includes(kwNeedle) ? 1 : 0;
+                    };
+                    const scored = new Array(pool.length);
+                    for (let i = 0; i < pool.length; i++) {
+                        const v = pool[i];
+                        const idx = v.__idx;
+                        const sem = (idx != null && idx < semScores.length) ? (semScores[idx] + 1) * 0.5 : 0;
+                        const kw = kwMatch(v);
+                        scored[i] = { v, fused: (1 - alpha) * kw + alpha * sem };
+                    }
+                    scored.sort((a, b) => b.fused - a.fused);
+                    const SEMANTIC_TOP_K = 500;
+                    results = scored.slice(0, SEMANTIC_TOP_K).map(s => s.v);
+                } else {
+                    if (searchTerm || generatedRegexString) {if (useRegex && mainSearchRegex) {results = filteredData.filter((verse) => verse && typeof verse.scripture_text === "string" && mainSearchRegex.test(verse.scripture_text)); if (mainSearchRegex.global) mainSearchRegex.lastIndex = 0;} else if (!useRegex && searchTerm) {const finalSearchTerm = isCaseSensitive ? searchTerm : searchTerm.toLowerCase(); results = filteredData.filter((verse) => {const text = verse && typeof verse.scripture_text === "string" ? (isCaseSensitive ? verse.scripture_text : verse.scripture_text.toLowerCase()) : ""; return text.includes(finalSearchTerm);});} else {results = filteredData;} } else {results = filteredData;}
+                    if (verseTitleRegex) {results = results.filter((verse) => verse && typeof verse.verse_title === "string" && verseTitleRegex.test(verse.verse_title)); if (verseTitleRegex.global) verseTitleRegex.lastIndex = 0;}
+                }
 
                 scriptureCache.currentResults = results;
 
-                if (shouldShuffle && results.length > 0) {shuffleArray(results);}
+                const semanticRankingApplied = (semanticSearchToggle && semanticSearchToggle.checked && originalSearchTerm);
+                if (shouldShuffle && !semanticRankingApplied && results.length > 0) {shuffleArray(results);}
 
-                let statusParts = []; if (originalSearchTerm) {statusParts.push(`Searching for "${originalSearchTerm}"`); if (useRegex) statusParts.push(`using ${wasAutoConverted ? "auto-converted " : ""}regex`); else statusParts.push(`as exact phrase`); statusParts.push(isCaseSensitive ? "(case-sensitive)" : "(case-insensitive)");} else {statusParts.push("Showing all verses");} if (verseTitleFilterTerm) statusParts.push(`filtering titles by regex "${verseTitleFilterTerm}"`); if (selectedVolumes.length < allAvailableVolumes.length) statusParts.push(`in selected volumes`); else statusParts.push(`in all volumes`); searchStatus.textContent = statusParts.join(", ") + ".";
+                let statusParts = []; if (originalSearchTerm) {statusParts.push(`Searching for "${originalSearchTerm}"`); if (semanticRankingApplied) {statusParts.push(`hybrid rank (${semanticWeightSlider.value}% semantic)`);} else if (useRegex) statusParts.push(`using ${wasAutoConverted ? "auto-converted " : ""}regex`); else statusParts.push(`as exact phrase`); statusParts.push(isCaseSensitive ? "(case-sensitive)" : "(case-insensitive)");} else {statusParts.push("Showing all verses");} if (verseTitleFilterTerm) statusParts.push(`filtering titles by regex "${verseTitleFilterTerm}"`); if (selectedVolumes.length < allAvailableVolumes.length) statusParts.push(`in selected volumes`); else statusParts.push(`in all volumes`); searchStatus.textContent = statusParts.join(", ") + ".";
 
                 const resultCount = results.length;
                 resultsHeadingText.textContent = `Scriptures (${resultCount > RESULT_RENDER_LIMIT ? '>' + RESULT_RENDER_LIMIT : resultCount})`;
@@ -1614,6 +1679,10 @@
 
         async function loadCFMSchedule() {
             try {
+                if (self.__CFM_SCHEDULE) {
+                    cfmSchedule = self.__CFM_SCHEDULE;
+                    return cfmSchedule;
+                }
                 const response = await fetch('cfm2026.json');
                 cfmSchedule = await response.json();
                 return cfmSchedule;
@@ -1708,6 +1777,41 @@
             searchInput.addEventListener("keypress", (e) => {if (e.key === "Enter") performSearch();});
             verseTitleFilterInput.addEventListener("keypress", (e) => {if (e.key === "Enter") performSearch();});
 
+            // --- Semantic search toggle + slider wiring ---
+            function updateSemanticWeightLabel() {
+                const pct = parseInt(semanticWeightSlider.value, 10);
+                semanticWeightLabel.textContent = `${pct}% semantic`;
+            }
+            updateSemanticWeightLabel();
+            semanticWeightSlider.addEventListener("input", updateSemanticWeightLabel);
+
+            if (window.__semanticSearch && typeof window.__semanticSearch.onStatus === "function") {
+                window.__semanticSearch.onStatus((msg) => { semanticStatus.textContent = msg; });
+            }
+
+            semanticSearchToggle.addEventListener("change", async () => {
+                if (semanticSearchToggle.checked) {
+                    semanticSliderWrap.classList.remove("hidden");
+                    if (!window.__semanticSearch) {
+                        semanticStatus.textContent = "Semantic module failed to load.";
+                        semanticSearchToggle.checked = false;
+                        semanticSliderWrap.classList.add("hidden");
+                        return;
+                    }
+                    try {
+                        await window.__semanticSearch.init();
+                    } catch (err) {
+                        console.error(err);
+                        semanticStatus.textContent = `Semantic init failed: ${err.message}`;
+                        semanticSearchToggle.checked = false;
+                        semanticSliderWrap.classList.add("hidden");
+                    }
+                } else {
+                    semanticSliderWrap.classList.add("hidden");
+                    semanticStatus.textContent = "";
+                }
+            });
+
             // Detect if device is mobile
             const isMobile = window.matchMedia("(max-width: 768px)").matches;
 
@@ -1773,7 +1877,6 @@
             }
 
             howToSearchButton.classList.add('opacity-0', 'pointer-events-none');
-            }, 3000);
         });
 
 

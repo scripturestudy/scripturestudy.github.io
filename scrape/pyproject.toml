@@ -1,0 +1,11 @@
+[project]
+name = "scripturestudy-scrape"
+version = "0.1.0"
+description = "Scrapling-based scraper for General Conference talks from churchofjesuschrist.org"
+requires-python = ">=3.11"
+dependencies = [
+    "scrapling[fetchers]>=0.4.7",
+]
+
+[tool.uv]
+package = false

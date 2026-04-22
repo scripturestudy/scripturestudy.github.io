@@ -1,0 +1,13 @@
+{
+  "model": "google/embeddinggemma-300m",
+  "num_verses": 1000,
+  "dim": 256,
+  "dtype": "int8",
+  "scale": 0.007874015748031496,
+  "doc_prompt": "title: none | text: ",
+  "query_prompt": "task: search result | query: ",
+  "normalized": true,
+  "order": "row-major; row i corresponds to lds-scriptures.json[i]",
+  "recon_cosine_mean": 0.9993417859077454,
+  "recon_cosine_min": 0.9992260336875916
+}
