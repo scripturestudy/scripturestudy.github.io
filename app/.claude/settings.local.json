@@ -1,0 +1,10 @@
+{
+  "enabledMcpjsonServers": [
+    "supabase-do",
+    "vibe_kanban",
+    "playwright",
+    "chrome_devtools",
+    "ahrefs",
+    "gsc"
+  ]
+}

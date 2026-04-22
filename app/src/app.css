@@ -1,0 +1,34 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: theme('fontFamily.sans');
+    color: theme('colors.foreground');
+    background-color: theme('colors.background');
+  }
+
+  body {
+    @apply antialiased;
+  }
+
+  /* Visible keyboard focus ring on everything that's interactive. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+}
+
+@layer components {
+  /* The one styling bit we genuinely want outside a component scope: the
+     yellow highlight on matched search terms. */
+  .highlight {
+    @apply rounded px-0.5 -mx-0.5;
+    background-color: theme('colors.highlight');
+  }
+
+  /* Utility: text the app treats as a caption. Used in ResultCard titles and stats axis labels. */
+  .caption {
+    @apply text-xs text-muted-foreground;
+  }
+}
