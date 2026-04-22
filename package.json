@@ -2,6 +2,7 @@
   "name": "scripturestudy",
   "version": "1.0.0",
   "scripts": {
-    "test": "node tests/test_json_validity.js"
+    "test": "node tests/test_json_validity.js",
+    "generate-data": "node scripts/generate-data-bundles.js"
   }
 }

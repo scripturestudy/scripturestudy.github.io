@@ -1,13 +1,19 @@
-const CACHE_NAME = 'scripturestudy-v1';
+const CACHE_NAME = 'scripturestudy-v4';
 const URLS_TO_CACHE = [
   '/',
   'index.html',
   'style.css',
   'script.js',
   'lds-scriptures.json',
+  'lds-scriptures.js',
   'cfm2026.json',
-  'assets/seek-scriptures.json'
+  'cfm2026.js',
+  'assets/seek-scriptures.json',
+  'assets/seek-scriptures.js'
 ];
+// Note: assets/embeddings.bin and assets/embeddings-meta.json are fetched lazily
+// (only when the user toggles on semantic search) and cached on-demand via the
+// fetch handler below.
 
 self.addEventListener('install', event => {
   event.waitUntil(
