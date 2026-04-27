@@ -11,7 +11,12 @@
     settings.useRegex = entry.useRegex;
     settings.caseSensitive = entry.caseSensitive;
     settings.columnsByVolume = entry.columnsByVolume;
-    settings.shuffleResults = entry.shuffleResults;
+    if (entry.scriptureSortMode) {
+      settings.scriptureSortMode = entry.scriptureSortMode;
+    } else if (typeof entry.shuffleResults === 'boolean') {
+      // backward-compat with history entries recorded before the sort rework
+      settings.scriptureSortMode = entry.shuffleResults ? 'shuffle' : 'canonical';
+    }
     settings.selectedVolumes = entry.selectedVolumes.slice();
     toggleHistory(false);
     await run();

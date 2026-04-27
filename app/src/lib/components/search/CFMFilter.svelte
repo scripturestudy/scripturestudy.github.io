@@ -22,7 +22,7 @@
   async function applyCFM() {
     if (!schedule || settings.cfmWeekIndex < 0) return;
     // Defaults tuned for a "reading" experience — let the layout react via $derived.
-    settings.shuffleResults = false;
+    settings.scriptureSortMode = 'canonical';
     settings.columnsByVolume = false;
     settings.singleColumn = true;
 

@@ -7,7 +7,8 @@ import { MAX_SEARCH_HISTORY } from '$lib/constants/limits.js';
  * @property {boolean} useRegex
  * @property {boolean} caseSensitive
  * @property {boolean} columnsByVolume
- * @property {boolean} shuffleResults
+ * @property {'canonical'|'reverse'|'shuffle'} [scriptureSortMode]
+ * @property {boolean} [shuffleResults]  legacy — older entries only
  * @property {string[]} selectedVolumes
  * @property {string} timestamp  ISO
  */

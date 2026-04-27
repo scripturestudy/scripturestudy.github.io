@@ -5,6 +5,7 @@
   import { settings } from '$lib/stores/settings.svelte.js';
   import { searchState, run } from '$lib/stores/search.svelte.js';
   import { ui } from '$lib/stores/ui.svelte.js';
+  import { cn } from '$lib/utils/cn.js';
   import VolumeCheckboxes from './VolumeCheckboxes.svelte';
   import CFMFilter from './CFMFilter.svelte';
 
@@ -17,11 +18,17 @@
   const toggles = [
     { key: 'useRegex', label: 'Search using regex' },
     { key: 'caseSensitive', label: 'Case sensitive' },
-    { key: 'columnsByVolume', label: 'Show volume columns' },
-    { key: 'shuffleResults', label: 'Shuffle results' },
-    { key: 'compactView', label: 'Compact view' },
-    { key: 'singleColumn', label: 'Single column' },
   ];
+
+  const selectClass = cn(
+    'flex h-9 w-full rounded-md border border-input bg-background px-2 py-1 text-sm shadow-sm transition-colors',
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+  );
+
+  function onSortChange(e) {
+    settings.scriptureSortMode = e.currentTarget.value;
+    if (searchState.firstSearchPerformed) run();
+  }
 </script>
 
 <Collapsible {open}>
@@ -60,6 +67,20 @@
           <h4 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Advanced Options
           </h4>
+
+          <div class="space-y-1">
+            <label for="scriptureSortMode" class="text-sm font-medium">Sort results</label>
+            <select
+              id="scriptureSortMode"
+              class={selectClass}
+              value={settings.scriptureSortMode}
+              onchange={onSortChange}
+            >
+              <option value="canonical">Book order (Genesis → Moroni)</option>
+              <option value="reverse">Reverse book order</option>
+              <option value="shuffle">Shuffle</option>
+            </select>
+          </div>
 
           {#each toggles as t (t.key)}
             <label class="flex items-center gap-2 text-sm cursor-pointer">

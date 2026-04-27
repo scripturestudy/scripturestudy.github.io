@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "scripts": {
     "test": "node tests/test_json_validity.js",
-    "generate-data": "node scripts/generate-data-bundles.js"
+    "generate-data": "node scripts/generate-data-bundles.js",
+    "build-conference": "node scripts/build-conference-data.js",
+    "build-hymns": "node scripts/build-hymns-data.js"
   }
 }

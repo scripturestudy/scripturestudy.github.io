@@ -45,8 +45,8 @@
     {#if settings.columnsByVolume}
       <VolumeColumns
         results={searchState.results}
-        pattern={searchState.term}
-        useRegex={settings.useRegex}
+        pattern={searchState.highlightPattern}
+        useRegex={searchState.highlightUseRegex}
         caseSensitive={settings.caseSensitive}
       />
     {:else}
@@ -54,8 +54,8 @@
         <div role="listitem">
           <ResultCard
             {verse}
-            pattern={searchState.term}
-            useRegex={settings.useRegex}
+            pattern={searchState.highlightPattern}
+            useRegex={searchState.highlightUseRegex}
             caseSensitive={settings.caseSensitive}
           />
         </div>

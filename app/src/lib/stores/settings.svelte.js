@@ -13,7 +13,8 @@ export const settings = $state({
   caseSensitive: false,
   // display
   compactView: isMobile,
-  shuffleResults: !isMobile,
+  /** 'canonical' | 'reverse' | 'shuffle' */
+  scriptureSortMode: 'canonical',
   columnsByVolume: !isMobile,
   singleColumn: false,
   // semantic
@@ -27,6 +28,30 @@ export const settings = $state({
   cfmWeekIndex: -1,
   // stats
   excludeStopWords: true,
+  // General Conference
+  /** whether the conference tab has ever been opened (enables lazy load) */
+  conferenceEnabled: false,
+  /** inclusive year range filter */
+  conferenceYearFrom: 2020,
+  conferenceYearTo: 2026,
+  conferenceIncludeApril: true,
+  conferenceIncludeOctober: true,
+  /** empty = all speakers; otherwise exact speaker-name match */
+  /** @type {string[]} */
+  conferenceSelectedSpeakers: [],
+  /** empty = all callings; otherwise speaker_role must match one of these group ids */
+  /** @type {string[]} */
+  conferenceSelectedCallings: [],
+  /** 'year-desc' | 'year-asc' | 'shuffle' */
+  conferenceSortMode: 'year-desc',
+
+  // Hymns
+  /** whether the hymns tab has ever been opened (enables lazy load) */
+  hymnsEnabled: false,
+  /** show chorus cards alongside verses (deduped to one chorus per hymn) */
+  hymnsIncludeChoruses: true,
+  /** 'number-asc' | 'number-desc' | 'title-asc' | 'shuffle' */
+  hymnsSortMode: 'number-asc',
 });
 
 /**

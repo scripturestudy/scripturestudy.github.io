@@ -17,6 +17,7 @@
   import { cn } from '$lib/utils/cn.js';
   import { settings } from '$lib/stores/settings.svelte.js';
   import { openModal } from '$lib/stores/ui.svelte.js';
+  import { buildChurchVerseUrl } from '$lib/constants/bookPaths.js';
 
   /**
    * Props:
@@ -34,8 +35,12 @@
   const chapter = $derived(verse?.chapter_number ?? '');
   const verseNum = $derived(verse?.verse_number ?? '');
 
+  // Prefer a direct verse link when the book is mapped; fall back to the
+  // site search for anything unexpected (e.g. malformed data, OD/Facsimile
+  // entries outside the main books).
   const churchUrl = $derived(
-    `https://www.churchofjesuschrist.org/search?facet=all&lang=eng&query=${encodeURIComponent(book)}+${chapter}%3A${verseNum}`,
+    buildChurchVerseUrl(verse) ||
+      `https://www.churchofjesuschrist.org/search?facet=all&lang=eng&query=${encodeURIComponent(book)}+${chapter}%3A${verseNum}`,
   );
   const googleUrl = $derived(`https://www.google.com/search?q=${encodeURIComponent(text)}`);
   const copyText = $derived(`> ${text} (${title})`);

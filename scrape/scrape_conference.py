@@ -20,17 +20,26 @@ Run:
 
 from __future__ import annotations
 
-import argparse
 import json
+import logging
 import re
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import Annotated
 from urllib.parse import urljoin, urlparse
 
+import typer
+
 from scrapling.fetchers import Fetcher
+
+# Scrapling emits an INFO line per request ("Fetched (200) <GET ...> (referer: ...)").
+# For bulk backfill/check runs that's hundreds of lines of noise before our own
+# output — silence it.
+logging.getLogger("scrapling").setLevel(logging.WARNING)
 
 BASE = "https://www.churchofjesuschrist.org"
 
@@ -66,6 +75,9 @@ class TalkRef:
     speaker: str
     url: str
     session: str | None = None
+    session_number: int = 0  # 1-indexed ordinal of the session within the conference
+    session_position: int = 0  # 1-indexed position of the talk within its session
+    conference_position: int = 0  # 1-indexed absolute position in the conference
 
 
 @dataclass
@@ -81,6 +93,9 @@ class Talk:
     slug: str
     conference: str
     session: str | None
+    session_number: int
+    session_position: int
+    conference_position: int
     title: str
     speaker: str | None
     speaker_role: str | None
@@ -109,7 +124,12 @@ def scrape_index(conference: str) -> tuple[str, list[TalkRef]]:
     conf_title = _text(_first(page.css("title"))) or conference
 
     talks: list[TalkRef] = []
-    current_session: str | None = None
+    seen_slugs: set[str] = set()
+    # Canonical session URL → {number, label, position}. Dict insertion order
+    # captures the order sessions first appear in the DOM, which matches the
+    # conference running order.
+    session_state: dict[str, dict] = {}
+    current_session_url: str | None = None
 
     # Walk every <a> in document order. Session anchors come before their
     # child talk anchors in the sidebar nav, so we can track the current
@@ -117,28 +137,53 @@ def scrape_index(conference: str) -> tuple[str, list[TalkRef]]:
     for a in page.css("a[href*='/study/general-conference/']"):
         href = a.attrib.get("href", "")
         if SESSION_HREF_RE.search(href):
-            label = _text(a)
-            if label:
-                current_session = label
+            canon = urlparse(href).path
+            state = session_state.get(canon)
+            if state is None:
+                state = {
+                    "number": len(session_state) + 1,
+                    "label": _text(a),
+                    "position": 0,
+                }
+                session_state[canon] = state
+            elif not state["label"]:
+                state["label"] = _text(a)
+            current_session_url = canon
             continue
         if not TALK_HREF_RE.match(href):
             continue
         slug = slug_from_href(href)
         # Dedupe; the nav lists each talk once but the page can repeat anchors
         # in other components (related links, etc.).
-        if any(t.slug == slug for t in talks):
+        if slug in seen_slugs:
             continue
+        seen_slugs.add(slug)
         # Title + subtitle (speaker) live in nested <p> tags inside the anchor.
         paragraphs = a.css("p")
         talk_title = _text(paragraphs[0]) if len(paragraphs) else _text(a)
         speaker = _text(paragraphs[1]) if len(paragraphs) > 1 else ""
+
+        state = session_state.get(current_session_url) if current_session_url else None
+        if state is not None:
+            state["position"] += 1
+            session_label = state["label"] or None
+            session_number = state["number"]
+            session_position = state["position"]
+        else:
+            session_label = None
+            session_number = 0
+            session_position = 0
+
         talks.append(
             TalkRef(
                 slug=slug,
                 title=talk_title,
                 speaker=speaker,
                 url=urljoin(BASE, href),
-                session=current_session,
+                session=session_label,
+                session_number=session_number,
+                session_position=session_position,
+                conference_position=len(talks) + 1,
             )
         )
 
@@ -193,6 +238,9 @@ def scrape_talk(ref: TalkRef, conference: str) -> Talk:
         slug=ref.slug,
         conference=conference,
         session=ref.session,
+        session_number=ref.session_number,
+        session_position=ref.session_position,
+        conference_position=ref.conference_position,
         title=title,
         speaker=speaker,
         speaker_role=_text(_first(page.css("p.author-role"))) or None,
@@ -212,6 +260,23 @@ def _conference_dir(out: Path, conference: str) -> Path:
     return out / conference.replace("/", "-")
 
 
+def _talk_filename(position: int, slug: str) -> str:
+    """Zero-padded ordinal prefix keeps shell/filesystem sort order aligned
+    with conference running order (e.g. 01-introduction.json)."""
+    return f"{position:02d}-{slug}.json"
+
+
+def _fmt_duration(seconds: float) -> str:
+    s = int(seconds)
+    h, rem = divmod(s, 3600)
+    m, sec = divmod(rem, 60)
+    if h:
+        return f"{h}h{m:02d}m{sec:02d}s"
+    if m:
+        return f"{m}m{sec:02d}s"
+    return f"{sec}s"
+
+
 def is_conference_cached(out: Path, conference: str) -> bool:
     """True when index.json exists and every talk it names has a JSON file."""
     root = _conference_dir(out, conference)
@@ -223,9 +288,16 @@ def is_conference_cached(out: Path, conference: str) -> bool:
     except (OSError, json.JSONDecodeError):
         return False
     talks_dir = root / "talks"
-    return bool(data.get("talks")) and all(
-        (talks_dir / f"{t['slug']}.json").exists() for t in data["talks"]
-    )
+    talks = data.get("talks") or []
+    if not talks:
+        return False
+    for t in talks:
+        pos = t.get("conference_position")
+        if not pos:
+            return False  # legacy index without positions — force re-scrape
+        if not (talks_dir / _talk_filename(pos, t["slug"])).exists():
+            return False
+    return True
 
 
 def run_conference(
@@ -236,8 +308,19 @@ def run_conference(
     skip_existing: bool = False,
     limit: int | None = None,
     only: str | None = None,
-) -> int:
-    """Scrape one conference. Returns the number of talks written."""
+    log_writer: Callable[[str], None] | None = None,
+    verbose: bool = False,
+) -> tuple[int, int, int]:
+    """Scrape one conference. Returns (newly_written, total_in_scope, talk_failures).
+
+    Talk-level exceptions are caught and logged so one bad fetch doesn't abort
+    the whole conference. `scrape_index` errors still propagate — if the index
+    itself can't be read, there's nothing to iterate over.
+
+    When `verbose`, each talk's outcome is logged (SUCCESS/CACHED). In
+    non-verbose mode only per-talk FAILs are logged; the caller handles the
+    conference-level summary.
+    """
     root = _conference_dir(out, conference)
     talks_dir = root / "talks"
     talks_dir.mkdir(parents=True, exist_ok=True)
@@ -266,128 +349,337 @@ def run_conference(
         refs = all_refs
 
     written = 0
+    talk_failures = 0
     for i, ref in enumerate(refs, 1):
-        dest = talks_dir / f"{ref.slug}.json"
+        dest = talks_dir / _talk_filename(ref.conference_position, ref.slug)
+        ts = datetime.now().isoformat(timespec="seconds")
         if skip_existing and dest.exists():
             print(f"  [{i}/{len(refs)}] {ref.slug} — cached", file=sys.stderr)
+            if log_writer and verbose:
+                log_writer(f"{ts} {conference} CACHED {ref.slug} {ref.url}")
             continue
         print(f"  [{i}/{len(refs)}] {ref.slug} — {ref.title}", file=sys.stderr)
-        talk = scrape_talk(ref, conference)
-        dest.write_text(json.dumps(_talk_to_dict(talk), indent=2, ensure_ascii=False))
-        written += 1
+        try:
+            talk = scrape_talk(ref, conference)
+            dest.write_text(json.dumps(_talk_to_dict(talk), indent=2, ensure_ascii=False))
+        except Exception as exc:  # noqa: BLE001 — keep scraping remaining talks
+            print(f"    ⚠ {ref.slug} — {exc}", file=sys.stderr)
+            if log_writer:
+                log_writer(f"{ts} {conference} FAIL {ref.slug} {ref.url} err={exc!r}")
+            talk_failures += 1
+        else:
+            if log_writer and verbose:
+                log_writer(f"{ts} {conference} SUCCESS {ref.slug} {ref.url}")
+            written += 1
         if i < len(refs) and delay:
             time.sleep(delay)
 
-    print(f"✓ Wrote {root}/ ({written} new, {len(refs) - written} cached)", file=sys.stderr)
-    return written
-
-
-def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    sub = parser.add_subparsers(dest="cmd", required=True)
-
-    p_scrape = sub.add_parser("scrape", help="Scrape one conference (YYYY/MM).")
-    p_scrape.add_argument("conference", help="Conference as YYYY/MM, e.g. 2026/04")
-    p_scrape.add_argument("--out", default="out", help="Output directory (default: ./out)")
-    p_scrape.add_argument("--limit", type=int, default=None, help="Only scrape the first N talks")
-    p_scrape.add_argument("--only", default=None, help="Scrape a single talk by slug (e.g. 11oaks)")
-    p_scrape.add_argument("--delay", type=float, default=0.5, help="Seconds between talk fetches")
-    p_scrape.add_argument(
-        "--skip-existing",
-        action="store_true",
-        help="Skip talks that already have a JSON file on disk.",
-    )
-
-    p_bf = sub.add_parser(
-        "backfill",
-        help="Scrape every semi-annual conference, resuming from the cache.",
-    )
-    p_bf.add_argument("--out", default="out", help="Output directory (default: ./out)")
-    p_bf.add_argument("--start", type=int, default=1971, help="Earliest year (default: 1971)")
-    p_bf.add_argument(
-        "--end",
-        type=int,
-        default=datetime.now().year,
-        help="Latest year, inclusive (default: current year)",
-    )
-    p_bf.add_argument(
-        "--months",
-        default="04,10",
-        help="Comma-separated MM values to try each year (default: 04,10)",
-    )
-    p_bf.add_argument("--delay", type=float, default=0.5, help="Seconds between talk fetches")
-    p_bf.add_argument(
-        "--conference-delay",
-        type=float,
-        default=1.0,
-        help="Seconds between conferences (default: 1.0)",
-    )
-
-    return parser
-
-
-def _normalize_argv(argv: list[str]) -> list[str]:
-    """Let `scrape_conference.py 2026/04` keep working by inserting the subcommand."""
-    if argv and (argv[0] == "-h" or argv[0] == "--help"):
-        return argv
-    if argv and argv[0] not in {"scrape", "backfill"}:
-        return ["scrape", *argv]
-    return argv
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = _build_parser()
-    raw = list(argv) if argv is not None else sys.argv[1:]
-    args = parser.parse_args(_normalize_argv(raw))
-
-    if args.cmd == "scrape":
-        if not re.fullmatch(r"\d{4}/\d{2}", args.conference):
-            parser.error("conference must look like YYYY/MM (e.g. 2026/04)")
-        run_conference(
-            args.conference,
-            Path(args.out),
-            delay=args.delay,
-            skip_existing=args.skip_existing,
-            limit=args.limit,
-            only=args.only,
-        )
-        return 0
-
-    # backfill
-    months = [m.strip() for m in args.months.split(",") if m.strip()]
-    if not months:
-        parser.error("--months must list at least one MM value")
-    out = Path(args.out)
-    skipped = scraped = failed = 0
-
-    for year in range(args.start, args.end + 1):
-        for month in months:
-            conference = f"{year}/{month}"
-            if is_conference_cached(out, conference):
-                print(f"⏭  {conference} — fully cached", file=sys.stderr)
-                skipped += 1
-                continue
-            try:
-                run_conference(
-                    conference,
-                    out,
-                    delay=args.delay,
-                    skip_existing=True,
-                )
-                scraped += 1
-            except Exception as exc:  # noqa: BLE001 — keep backfill going
-                print(f"⚠  {conference} — {exc}", file=sys.stderr)
-                failed += 1
-                continue
-            if args.conference_delay:
-                time.sleep(args.conference_delay)
-
+    cached_count = len(refs) - written - talk_failures
     print(
-        f"done. scraped={scraped} cached={skipped} failed={failed}",
+        f"✓ Wrote {root}/ ({written} new, {cached_count} cached, {talk_failures} failed)",
         file=sys.stderr,
     )
+    return written, len(refs), talk_failures
+
+
+app = typer.Typer(
+    name="scrape-conference",
+    help="Scrape General Conference talks from churchofjesuschrist.org.",
+    no_args_is_help=True,
+    add_completion=False,
+)
+
+
+def _parse_months(raw: str) -> list[str]:
+    months = [m.strip() for m in raw.split(",") if m.strip()]
+    if not months:
+        raise typer.BadParameter("--months must list at least one MM value")
+    return months
+
+
+@app.command()
+def scrape(
+    conference: Annotated[
+        str, typer.Argument(help="Conference as YYYY/MM, e.g. 2026/04.")
+    ],
+    out: Annotated[Path, typer.Option(help="Output directory.")] = Path("out"),
+    limit: Annotated[
+        int | None, typer.Option(help="Only scrape the first N talks.")
+    ] = None,
+    only: Annotated[
+        str | None,
+        typer.Option(help="Scrape a single talk by slug (e.g. 11oaks)."),
+    ] = None,
+    delay: Annotated[
+        float, typer.Option(help="Seconds between talk fetches.")
+    ] = 0.5,
+    skip_existing: Annotated[
+        bool,
+        typer.Option(
+            "--skip-existing",
+            help="Skip talks whose JSON file already exists on disk.",
+        ),
+    ] = False,
+) -> None:
+    """Scrape one conference (YYYY/MM)."""
+    if not re.fullmatch(r"\d{4}/\d{2}", conference):
+        raise typer.BadParameter("conference must look like YYYY/MM (e.g. 2026/04)")
+    run_conference(
+        conference,
+        out,
+        delay=delay,
+        skip_existing=skip_existing,
+        limit=limit,
+        only=only,
+    )
+
+
+@app.command()
+def backfill(
+    out: Annotated[Path, typer.Option(help="Output directory.")] = Path("out"),
+    start: Annotated[int, typer.Option(help="Earliest year (inclusive).")] = 1971,
+    end: Annotated[
+        int, typer.Option(help="Latest year (inclusive).")
+    ] = datetime.now().year,
+    months: Annotated[
+        str, typer.Option(help="Comma-separated MM values to try each year.")
+    ] = "04,10",
+    delay: Annotated[
+        float, typer.Option(help="Seconds between talk fetches.")
+    ] = 0.5,
+    conference_delay: Annotated[
+        float,
+        typer.Option("--conference-delay", help="Seconds between conferences."),
+    ] = 1.0,
+    log: Annotated[
+        Path | None,
+        typer.Option(
+            help=(
+                "Per-conference log file (default <out>/_backfill.log). "
+                "Pass /dev/null to disable."
+            ),
+        ),
+    ] = None,
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force",
+            help=(
+                "Also process conferences whose output directory already exists. "
+                "Existing talk files are never overwritten."
+            ),
+        ),
+    ] = False,
+    check: Annotated[
+        bool,
+        typer.Option(
+            "--check",
+            help=(
+                "Read-only audit: fetch each conference index, compare expected "
+                "talk count against on-disk files, print a status line, and exit. "
+                "Nothing is written."
+            ),
+        ),
+    ] = False,
+    verbose: Annotated[
+        bool,
+        typer.Option(
+            "--verbose",
+            "-v",
+            help=(
+                "Log one line per talk (SUCCESS/CACHED). Default logs per-talk "
+                "lines only for FAILs; conferences get a single OK summary line."
+            ),
+        ),
+    ] = False,
+) -> None:
+    """Scrape every semi-annual conference, resuming from the cache."""
+    month_list = _parse_months(months)
+    out.mkdir(parents=True, exist_ok=True)
+
+    if check:
+        raise typer.Exit(_run_check(out, start, end, month_list))
+
+    raise typer.Exit(
+        _run_backfill(
+            out=out,
+            start=start,
+            end=end,
+            months=month_list,
+            delay=delay,
+            conference_delay=conference_delay,
+            log_path_override=log,
+            force=force,
+            verbose=verbose,
+        )
+    )
+
+
+def _run_check(out: Path, start: int, end: int, months: list[str]) -> int:
+    """Audit mode: fetch each index, compare counts, print results. Read-only."""
+    statuses: dict[str, int] = {}
+
+    def bump(status: str) -> None:
+        statuses[status] = statuses.get(status, 0) + 1
+
+    header = f"{'conference':8s}  {'status':9s}  {'disk':>4s} / {'expected':>8s}  note"
+    print(header, flush=True)
+    print("-" * len(header), flush=True)
+
+    for year in range(start, end + 1):
+        for month in months:
+            conference = f"{year}/{month}"
+            conf_dir = _conference_dir(out, conference)
+            talks_dir = conf_dir / "talks"
+            on_disk = (
+                len(list(talks_dir.glob("*.json"))) if talks_dir.is_dir() else 0
+            )
+            try:
+                _, refs = scrape_index(conference)
+            except Exception as exc:  # noqa: BLE001 — audit must keep going
+                bump("FAIL")
+                print(
+                    f"{conference:8s}  {'FAIL':9s}  {on_disk:>4d} / {'?':>8s}  {exc}",
+                    flush=True,
+                )
+                continue
+            expected = len(refs)
+            if on_disk > expected:
+                status = "EXTRA"
+            elif on_disk == expected:
+                status = "OK"
+            elif on_disk == 0:
+                status = "NOT_RUN" if not conf_dir.exists() else "EMPTY"
+            else:
+                status = "PARTIAL"
+            bump(status)
+            print(
+                f"{conference:8s}  {status:9s}  {on_disk:>4d} / {expected:>8d}",
+                flush=True,
+            )
+
+    parts = " ".join(f"{k}={v}" for k, v in sorted(statuses.items()))
+    total = sum(statuses.values())
+    print(f"summary: {parts} total={total}", file=sys.stderr)
     return 0
 
 
+def _run_backfill(
+    *,
+    out: Path,
+    start: int,
+    end: int,
+    months: list[str],
+    delay: float,
+    conference_delay: float,
+    log_path_override: Path | None,
+    force: bool,
+    verbose: bool,
+) -> int:
+    # Leading underscore keeps the log file sorted above the YYYY-MM/ directories.
+    log_path = log_path_override if log_path_override else out / "_backfill.log"
+    # Line-buffered append so a Ctrl-C still leaves a readable log.
+    log = open(log_path, "a", buffering=1, encoding="utf-8")
+
+    def write_log(line: str) -> None:
+        print(line, file=log)
+
+    scraped = skipped = 0
+    failed: list[tuple[str, str]] = []  # (conference, err_repr) for index-level failures
+    talk_fail_total = 0
+    total_start = time.perf_counter()
+    write_log(
+        f"=== backfill started {datetime.now().isoformat(timespec='seconds')} "
+        f"start={start} end={end} months={','.join(months)} "
+        f"force={force} verbose={verbose} out={out} ==="
+    )
+
+    try:
+        for year in range(start, end + 1):
+            for month in months:
+                conference = f"{year}/{month}"
+                ts = datetime.now().isoformat(timespec="seconds")
+                conf_start = time.perf_counter()
+                conf_dir = _conference_dir(out, conference)
+
+                if conf_dir.exists() and not force:
+                    print(
+                        f"⏭  {conference} — {conf_dir}/ exists (use --force to resume)",
+                        file=sys.stderr,
+                    )
+                    write_log(f"{ts} {conference} EXISTS")
+                    skipped += 1
+                    continue
+
+                if is_conference_cached(out, conference):
+                    print(f"⏭  {conference} — fully cached", file=sys.stderr)
+                    write_log(f"{ts} {conference} CACHED")
+                    skipped += 1
+                    continue
+
+                try:
+                    new, total, talk_fails = run_conference(
+                        conference,
+                        out,
+                        delay=delay,
+                        skip_existing=True,
+                        log_writer=write_log,
+                        verbose=verbose,
+                    )
+                except Exception as exc:  # noqa: BLE001 — index fetch failed
+                    print(f"⚠  {conference} — {exc}", file=sys.stderr)
+                    write_log(f"{ts} {conference} FAIL_INDEX err={exc!r}")
+                    failed.append((conference, repr(exc)))
+                    continue
+
+                elapsed = time.perf_counter() - conf_start
+                fail_note = f" fail={talk_fails}" if talk_fails else ""
+                write_log(
+                    f"{ts} {conference} OK new={new}/{total}{fail_note} t={elapsed:.1f}s"
+                )
+                talk_fail_total += talk_fails
+                scraped += 1
+
+                if conference_delay:
+                    time.sleep(conference_delay)
+    finally:
+        total_elapsed = time.perf_counter() - total_start
+        summary = (
+            f"done. conferences scraped={scraped} cached={skipped} failed={len(failed)} "
+            f"talk_failures={talk_fail_total} total={_fmt_duration(total_elapsed)}"
+        )
+        write_log(
+            f"=== backfill finished {datetime.now().isoformat(timespec='seconds')} "
+            f"total={_fmt_duration(total_elapsed)} "
+            f"scraped={scraped} cached={skipped} failed={len(failed)} "
+            f"talk_failures={talk_fail_total} ==="
+        )
+        log.close()
+        print(summary, file=sys.stderr)
+        if failed:
+            print("failed conferences (index fetch):", file=sys.stderr)
+            for conf, err in failed:
+                print(f"  {conf}: {err}", file=sys.stderr)
+        if talk_fail_total:
+            print(
+                f"(per-talk FAIL lines in the log — grep FAIL {log_path})",
+                file=sys.stderr,
+            )
+        print(f"log: {log_path}", file=sys.stderr)
+    return 0
+
+
+def _main() -> None:
+    """Entry point. Rewrites argv[1] to `scrape YYYY/MM` for backward compat."""
+    argv = sys.argv[1:]
+    if (
+        argv
+        and argv[0] not in {"scrape", "backfill", "--help", "-h"}
+        and re.fullmatch(r"\d{4}/\d{2}", argv[0])
+    ):
+        sys.argv.insert(1, "scrape")
+    app()
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    _main()

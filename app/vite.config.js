@@ -31,12 +31,27 @@ function serveRepoRootData() {
   };
 }
 
+// Pre-declare every lucide icon the app uses so Vite bundles them all up
+// front. Without this, Vite discovers icons one-by-one as components mount and
+// kicks off mid-page re-optimizations whose chunk hashes don't match what's
+// already in flight, causing TypeErrors deep in the Svelte runtime
+// ("first_child_getter.call(node)" with first_child_getter undefined).
+const LUCIDE_ICONS = [
+  'book-plus', 'check', 'chevron-down', 'chevron-up', 'clipboard-copy',
+  'clock', 'copy', 'download', 'external-link', 'eye', 'help-circle', 'info',
+  'menu', 'minus', 'more-vertical', 'music', 'notebook-pen', 'pencil', 'plus',
+  'search', 'settings-2', 'trash-2', 'trending-up', 'triangle-alert', 'x',
+];
+
 export default defineConfig({
   plugins: [svelte(), serveRepoRootData()],
   resolve: {
     alias: {
       $lib: path.resolve(here, 'src/lib'),
     },
+  },
+  optimizeDeps: {
+    include: LUCIDE_ICONS.map((n) => `lucide-svelte/icons/${n}`),
   },
   base: './',
   build: {

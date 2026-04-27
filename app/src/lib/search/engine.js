@@ -1,6 +1,7 @@
 import { parseQuery } from './query.js';
 import { buildVerseTitleRegex } from './verseTitle.js';
 import { shuffleArray } from '$lib/utils/text.js';
+import { compareVersesCanonical } from '$lib/constants/bookOrder.js';
 import { SEMANTIC_TOP_K } from '$lib/constants/limits.js';
 
 /**
@@ -10,7 +11,7 @@ import { SEMANTIC_TOP_K } from '$lib/constants/limits.js';
  * @property {boolean}  useRegex
  * @property {boolean}  caseSensitive
  * @property {string[]} selectedVolumes
- * @property {boolean}  shuffle
+ * @property {'canonical'|'reverse'|'shuffle'} sortMode
  * @property {boolean}  semantic          // semantic hybrid mode
  * @property {number}   semanticAlpha     // 0..1 weight of semantic score
  * @property {Float32Array|null} semanticScores  // index-aligned with full verse array
@@ -23,6 +24,8 @@ import { SEMANTIC_TOP_K } from '$lib/constants/limits.js';
  * @property {string} status
  * @property {boolean} wasAutoConverted
  * @property {'empty'|'phrase'|'regex'|'auto-and'|'auto-or'|'semantic-hybrid'} rankingMode
+ * @property {string} highlightPattern        regex source for HighlightedText
+ * @property {boolean} highlightUseRegex      true when highlightPattern should be treated as regex
  * @property {{ field: 'term'|'verseTitle', message: string }|null} error
  */
 
@@ -61,35 +64,28 @@ export function runSearch(data, settings) {
   const semanticActive = settings.semantic && settings.semanticScores && parsed.mode !== 'empty';
   if (semanticActive) {
     results = hybridRescore(pool, settings.semanticScores, settings.semanticAlpha, (text) =>
-      keywordMatches(text, parsed, settings.caseSensitive),
+      matchText(text, parsed, settings.caseSensitive),
     );
     if (title.regex) results = results.filter((v) => title.regex.test(v.verse_title || ''));
     results = results.slice(0, SEMANTIC_TOP_K);
     rankingMode = 'semantic-hybrid';
   } else {
     results = pool;
-    if (parsed.regex) {
-      const rx = parsed.regex;
-      results = results.filter((v) => {
-        rx.lastIndex = 0;
-        const ok = rx.test(v.scripture_text || '');
-        rx.lastIndex = 0;
-        return ok;
-      });
-    } else if (parsed.mode === 'phrase') {
-      const needle = parsed.phrase;
-      results = results.filter((v) => {
-        const text = v.scripture_text || '';
-        const hay = settings.caseSensitive ? text : text.toLowerCase();
-        return hay.includes(needle);
-      });
+    if (parsed.mode !== 'empty') {
+      results = results.filter((v) => matchText(v.scripture_text || '', parsed, settings.caseSensitive));
     }
     if (title.regex) results = results.filter((v) => title.regex.test(v.verse_title || ''));
     rankingMode = parsed.mode;
   }
 
-  if (settings.shuffle && !semanticActive && results.length > 0) {
-    results = shuffleArray(results);
+  if (!semanticActive && results.length > 0) {
+    if (settings.sortMode === 'shuffle') {
+      results = shuffleArray(results);
+    } else if (settings.sortMode === 'reverse') {
+      results = results.slice().sort((a, b) => compareVersesCanonical(b, a));
+    } else {
+      results = results.slice().sort(compareVersesCanonical);
+    }
   }
 
   return {
@@ -97,6 +93,8 @@ export function runSearch(data, settings) {
     status: composeStatus(settings, parsed, rankingMode),
     wasAutoConverted: parsed.wasAutoConverted,
     rankingMode,
+    highlightPattern: parsed.highlightSource,
+    highlightUseRegex: parsed.mode !== 'phrase' && parsed.mode !== 'empty',
     error: null,
   };
 }
@@ -115,9 +113,15 @@ function hybridRescore(pool, scores, alpha, kwMatch) {
   return out.map((s) => s.v);
 }
 
-function keywordMatches(text, parsed, caseSensitive) {
+/**
+ * Test whether `text` satisfies the parsed query. Cheap path uses
+ * `String.prototype.includes` (case-folded once); only explicit-regex mode
+ * pays for the RegExp engine.
+ */
+export function matchText(text, parsed, caseSensitive) {
   if (!text) return false;
-  if (parsed.regex) {
+  if (parsed.mode === 'regex') {
+    if (!parsed.regex) return false;
     parsed.regex.lastIndex = 0;
     const ok = parsed.regex.test(text);
     parsed.regex.lastIndex = 0;
@@ -126,6 +130,15 @@ function keywordMatches(text, parsed, caseSensitive) {
   if (parsed.mode === 'phrase') {
     const hay = caseSensitive ? text : text.toLowerCase();
     return hay.includes(parsed.phrase);
+  }
+  if (parsed.mode === 'auto-and' || parsed.mode === 'auto-or') {
+    const hay = caseSensitive ? text : text.toLowerCase();
+    if (parsed.mode === 'auto-and') {
+      for (const t of parsed.terms) if (!hay.includes(t)) return false;
+      return true;
+    }
+    for (const t of parsed.terms) if (hay.includes(t)) return true;
+    return false;
   }
   return false;
 }
@@ -137,8 +150,12 @@ function composeStatus(settings, parsed, rankingMode) {
     parts.push(`Searching for "${term}"`);
     if (rankingMode === 'semantic-hybrid') {
       parts.push(`hybrid rank (${Math.round(settings.semanticAlpha * 100)}% semantic)`);
-    } else if (rankingMode === 'regex' || rankingMode === 'auto-and' || rankingMode === 'auto-or') {
-      parts.push(`using ${parsed.wasAutoConverted ? 'auto-converted ' : ''}regex`);
+    } else if (rankingMode === 'regex') {
+      parts.push('using regex');
+    } else if (rankingMode === 'auto-and') {
+      parts.push(`as ${parsed.terms.length} AND-joined phrases`);
+    } else if (rankingMode === 'auto-or') {
+      parts.push(`as ${parsed.terms.length} OR-joined phrases`);
     } else {
       parts.push('as exact phrase');
     }
@@ -158,5 +175,13 @@ function composeStatus(settings, parsed, rankingMode) {
 }
 
 function emptyResult({ error = null, status = '' } = {}) {
-  return { results: [], status, wasAutoConverted: false, rankingMode: 'empty', error };
+  return {
+    results: [],
+    status,
+    wasAutoConverted: false,
+    rankingMode: 'empty',
+    highlightPattern: '',
+    highlightUseRegex: false,
+    error,
+  };
 }
