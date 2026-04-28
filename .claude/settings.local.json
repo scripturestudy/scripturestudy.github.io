@@ -48,7 +48,12 @@
       "Bash(.venv/bin/python -c ' *)",
       "Bash(curl -sI -A Mozilla/5.0 -o /dev/null -w '%{http_code}' 'https://www.churchofjesuschrist.org/study/general-conference/__TRACKED_VAR__/10?lang=eng')",
       "Bash(curl -sI -A Mozilla/5.0 -o /dev/null -w '%{http_code}' 'https://www.churchofjesuschrist.org/study/general-conference/__TRACKED_VAR__?lang=eng')",
-      "Bash(curl -s -A \"Mozilla/5.0\" \"https://www.churchofjesuschrist.org/study/general-conference/1971/10?lang=eng\" -o /tmp/1971.html)"
+      "Bash(curl -s -A \"Mozilla/5.0\" \"https://www.churchofjesuschrist.org/study/general-conference/1971/10?lang=eng\" -o /tmp/1971.html)",
+      "Bash(.venv/bin/python *)",
+      "Bash(grep -c ' EXISTS$' out-test/_backfill.log)",
+      "mcp__chrome_devtools__navigate_page",
+      "mcp__chrome_devtools__take_screenshot",
+      "Bash(pkill -f \"vite\")"
     ]
   },
   "enabledMcpjsonServers": [
