@@ -37,6 +37,7 @@
 
   import NoteModal from '$lib/components/modals/NoteModal.svelte';
   import ContextDrawer from '$lib/components/modals/ContextDrawer.svelte';
+  import TalkContextDrawer from '$lib/components/modals/TalkContextDrawer.svelte';
   import SearchHelpModal from '$lib/components/modals/SearchHelpModal.svelte';
   import StatsHelpModal from '$lib/components/modals/StatsHelpModal.svelte';
   import StopWordsModal from '$lib/components/modals/StopWordsModal.svelte';
@@ -209,6 +210,7 @@
 
 <NoteModal />
 <ContextDrawer />
+<TalkContextDrawer />
 <SearchHelpModal />
 <StatsHelpModal />
 <StopWordsModal />
