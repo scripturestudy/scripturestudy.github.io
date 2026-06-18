@@ -34,6 +34,8 @@
         let wordCloudLayout = null;
         let currentCompactActionVerse = null; // To store the active verse for the compact action modal
         let seekScriptures = [];
+        let currentSelectedText = '';
+        let currentSelectedVerseTitle = '';
 
 
         // --- DOM Element References ---
@@ -109,6 +111,7 @@
         const compactActionAddToJournalButton = document.getElementById("compactActionAddToJournalButton");
         const compactActionGoogleSearchButton = document.getElementById("compactActionGoogleSearchButton");
         const compactActionChurchSiteLink = document.getElementById("compactActionChurchSiteLink");
+        const selectionAddToJournalButton = document.getElementById('selectionAddToJournalButton');
 
         // Journal DOM Elements
         const journalEditor = document.getElementById("journalEditor");
@@ -212,6 +215,64 @@
                 noteModal.classList.remove('active');
                 if (noteTextarea) noteTextarea.value = '';
             }
+        }
+
+        function openNoteModalForText(scriptureText, verseTitle, triggerButton) {
+            if (modalScriptureTextEl) modalScriptureTextEl.textContent = scriptureText;
+            if (modalVerseTitleEl) modalVerseTitleEl.textContent = verseTitle;
+
+            const handleSaveNote = () => {
+                const userNote = noteTextarea.value.trim();
+                let appendedNote = `> ${scriptureText} (${verseTitle})`;
+                if (userNote) {
+                    appendedNote = `${userNote}\n${appendedNote}`;
+                }
+                if (journalEditor.value) {
+                    appendedNote = `\n\n${appendedNote}`;
+                }
+                journalEditor.value += appendedNote;
+                updateJournalPreview();
+                journalEditor.scrollTop = journalEditor.scrollHeight;
+                cleanup();
+                hideModal();
+                if (triggerButton) {
+                    showButtonFeedback(triggerButton, '<span class="text-green-600">✓ Added!</span>');
+                }
+            };
+
+            const handleKeydown = (e) => {
+                if (e.key === 'Enter' && e.shiftKey) {
+                    e.preventDefault();
+                    handleSaveNote();
+                }
+            };
+
+            const handleCancel = () => {
+                cleanup();
+                hideModal();
+            };
+
+            const handleModalClick = (e) => {
+                if (e.target === noteModal) {
+                    handleCancel();
+                }
+            };
+
+            const cleanup = () => {
+                noteTextarea.removeEventListener('keydown', handleKeydown);
+                saveNoteButton.removeEventListener('click', handleSaveNote);
+                if (modalCloseButton) modalCloseButton.removeEventListener('click', handleCancel);
+                if (noteModal) noteModal.removeEventListener('click', handleModalClick);
+            };
+
+            noteTextarea.addEventListener('keydown', handleKeydown);
+            saveNoteButton.addEventListener('click', handleSaveNote);
+            if (modalCloseButton) modalCloseButton.addEventListener('click', handleCancel);
+            if (noteModal) noteModal.addEventListener('click', handleModalClick);
+
+            showModal();
+            noteTextarea.value = '';
+            noteTextarea.focus();
         }
 
         // --- Data Fetching and Initialization ---
@@ -343,6 +404,35 @@
                 if (contextDrawerOverlay.classList.contains("active")) closeModal(contextDrawerOverlay);
             }
         });
+
+        function handleSelectionEvent() {
+            const selection = window.getSelection();
+            if (!selection || selection.isCollapsed) {
+                currentSelectedText = '';
+                currentSelectedVerseTitle = '';
+                return;
+            }
+
+            currentSelectedText = selection.toString();
+            let node = selection.anchorNode;
+            if (node && node.nodeType === Node.TEXT_NODE) {
+                node = node.parentElement;
+            }
+            const card = node ? node.closest('.result-card, .context-drawer-card') : null;
+            if (card && card.dataset.verseData) {
+                try {
+                    const data = JSON.parse(card.dataset.verseData);
+                    currentSelectedVerseTitle = data.verse_title || 'Selected Text';
+                } catch {
+                    currentSelectedVerseTitle = 'Selected Text';
+                }
+            } else {
+                currentSelectedVerseTitle = 'Selected Text';
+            }
+        }
+
+        document.addEventListener('mouseup', handleSelectionEvent);
+        document.addEventListener('keyup', handleSelectionEvent);
 
         // --- Advanced Search Area Collapse/Expand ---
         function toggleAdvancedSearchArea(forceCollapse = null) {
@@ -2075,5 +2165,11 @@
             compactActionChurchSiteLink.addEventListener('click', () => {
                 // Allow a moment for the new tab to open before closing.
                 setTimeout(() => closeModal(compactActionModal), 100);
+            });
+        }
+
+        if (selectionAddToJournalButton) {
+            selectionAddToJournalButton.addEventListener('click', () => {
+                openNoteModalForText(currentSelectedText, currentSelectedVerseTitle || 'Selected Text', selectionAddToJournalButton);
             });
         }
