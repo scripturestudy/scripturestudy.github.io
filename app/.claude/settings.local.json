@@ -6,5 +6,10 @@
     "chrome_devtools",
     "ahrefs",
     "gsc"
-  ]
+  ],
+  "permissions": {
+    "allow": [
+      "Bash(node *)"
+    ]
+  }
 }

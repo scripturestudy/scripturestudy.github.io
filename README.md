@@ -1,3 +1,9 @@
+
+
+Deprecated, move to bryanwhiting/scriptures on 2026-10-04
+
+
+
 # Read Scriptures
 A hyper-powerful search-and-explore tool for analyzing.
 
