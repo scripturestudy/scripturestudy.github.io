@@ -25,8 +25,9 @@
    *   pattern        — search term / regex source
    *   useRegex
    *   caseSensitive
+   *   inContext      — true inside TalkContextDrawer (disables click-to-open-context)
    */
-  let { hit, talk, pattern = '', useRegex = false, caseSensitive = false } = $props();
+  let { hit, talk, pattern = '', useRegex = false, caseSensitive = false, inContext = false } = $props();
 
   const text = $derived(hit?.text ?? '');
   const paraId = $derived(hit?.paraId ?? '');
@@ -35,14 +36,14 @@
     return m === 4 ? 'April' : m === 10 ? 'October' : String(m);
   }
 
-  const citation = $derived(
-    talk ? `${talk.sp}, "${talk.t}", ${monthLabel(talk.m)} ${talk.y}` : '',
-  );
   const paragraphUrl = $derived(
     talk ? (paraId ? `${talk.u}#${paraId}` : talk.u) : '#',
   );
+  const citationMarkdown = $derived(
+    talk ? `${talk.sp}, [${talk.t}](${paragraphUrl}), ${monthLabel(talk.m)} ${talk.y}` : '',
+  );
   const googleUrl = $derived(`https://www.google.com/search?q=${encodeURIComponent(text)}`);
-  const copyText = $derived(`> ${text} — ${citation}`);
+  const copyText = $derived(`> ${text} — ${citationMarkdown}`);
 
   let copied = $state(false);
   let added = $state(false);
@@ -57,13 +58,18 @@
 
   function openNote() {
     openModal('note', {
-      verseTitle: citation,
+      verseTitle: citationMarkdown,
       scriptureText: text,
       onAdded: () => {
         added = true;
         setTimeout(() => (added = false), 1500);
       },
     });
+  }
+
+  function openTalkContext() {
+    if (inContext || hit?.talkIdx == null) return;
+    openModal('talk-context', { talkIdx: hit.talkIdx, paraId });
   }
 </script>
 
@@ -76,17 +82,33 @@
   <div class="flex {settings.compactView ? 'flex-col' : 'flex-row'} gap-3">
     <div class="flex-grow min-w-0">
       {#if paraId}
-        <a
-          href={paragraphUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          class="caption inline-block text-xs text-muted-foreground hover:text-foreground mb-1"
-          title="Open paragraph on churchofjesuschrist.org"
-        >
-          ¶ {paraId}
-        </a>
+        {#if inContext}
+          <span class="caption inline-block text-xs text-muted-foreground mb-1">
+            ¶ {paraId}
+          </span>
+        {:else}
+          <button
+            type="button"
+            class="caption inline-block text-xs text-muted-foreground hover:text-foreground mb-1 cursor-pointer"
+            title="View paragraph in context of the talk"
+            onclick={openTalkContext}
+          >
+            ¶ {paraId}
+          </button>
+        {/if}
       {/if}
-      <HighlightedText {text} {pattern} {useRegex} {caseSensitive} />
+      {#if inContext}
+        <HighlightedText {text} {pattern} {useRegex} {caseSensitive} />
+      {:else}
+        <button
+          type="button"
+          class="block w-full text-left cursor-pointer"
+          title="View paragraph in context of the talk"
+          onclick={openTalkContext}
+        >
+          <HighlightedText {text} {pattern} {useRegex} {caseSensitive} />
+        </button>
+      {/if}
     </div>
 
     {#if settings.compactView}
